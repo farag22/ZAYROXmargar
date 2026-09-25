@@ -1,0 +1,1 @@
+ALTER TABLE `products` ADD `product_image` varchar(768);

@@ -1,0 +1,19 @@
+import { useAuth } from "@/_core/hooks/useAuth";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, BarChart3, Package, ShieldCheck, Store, WalletCards } from "lucide-react";
+import { startLogin } from "@/const";
+import { useEffect } from "react";
+import { useLocation } from "wouter";
+
+/**
+ * All content in this page are only for example, replace with your own feature implementation
+ * When building pages, remember your instructions in Frontend Workflow, Frontend Best Practices, Design Guide and Common Pitfalls
+ */
+export default function Home() {
+  const { isAuthenticated, loading } = useAuth(); const [, setLocation] = useLocation();
+  useEffect(() => { if (isAuthenticated) setLocation("/dashboard"); }, [isAuthenticated, setLocation]);
+  if (loading || isAuthenticated) return <div className="min-h-screen bg-background" />;
+  return <main className="min-h-screen overflow-hidden bg-background"><section className="relative mx-auto grid min-h-screen max-w-7xl items-center gap-12 px-5 py-14 lg:grid-cols-[1.1fr_.9fr] lg:px-10"><div className="absolute -top-40 -right-40 size-[32rem] rounded-full bg-primary/10 blur-3xl"/><div className="relative"><div className="mb-10 flex items-center gap-3"><span className="grid size-11 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-xl shadow-primary/20"><Store/></span><span><b className="block tracking-tight">ZAYROX</b><small className="text-[10px] tracking-[.18em] text-muted-foreground">SHOP MANAGER</small></span></div><p className="mb-5 inline-flex rounded-full bg-secondary px-4 py-2 text-xs font-bold text-secondary-foreground">إدارة محلك، بوضوح أكبر</p><h1 className="max-w-xl text-4xl font-extrabold leading-[1.35] tracking-tight md:text-6xl">كل ما يحتاجه محلك في <span className="text-primary">مكان واحد.</span></h1><p className="mt-6 max-w-lg text-base leading-8 text-muted-foreground">راقب المبيعات والمخزون والديون والأرباح من واجهة عربية بسيطة تحفظ وقتك وتمنحك قرارات أوضح.</p><div className="mt-9 flex flex-wrap gap-3"><Button size="lg" onClick={() => startLogin()}>ابدأ إدارة محلك <ArrowLeft className="mr-2 size-4"/></Button><span className="flex items-center gap-2 px-3 text-xs text-muted-foreground"><ShieldCheck className="size-4 text-primary"/>بياناتك معزولة وآمنة</span></div></div><div className="relative rounded-[2rem] border border-border/70 bg-card p-5 shadow-2xl shadow-primary/10"><div className="mb-5 flex items-center justify-between"><div><p className="text-xs text-muted-foreground">لوحة اليوم</p><b className="text-lg">صورة محلك في دقيقة</b></div><span className="rounded-xl bg-secondary p-3 text-primary"><BarChart3/></span></div><div className="grid gap-3 sm:grid-cols-2"><Feature icon={WalletCards} title="المبيعات والأرباح" text="احسب كل عملية بيع فوراً."/><Feature icon={Package} title="المخزون" text="انتبه قبل نفاد المنتجات."/><Feature icon={Store} title="متعدد المحلات" text="بيانات مستقلة لكل محل."/><Feature icon={ShieldCheck} title="اشتراكات واضحة" text="ترقية آمنة عبر Vodafone Cash."/></div><div className="mt-5 rounded-2xl bg-primary p-5 text-primary-foreground"><p className="text-xs opacity-75">مصمم لصاحب المحل</p><p className="mt-2 text-lg font-bold">بسيط على الهاتف، قوي على الكمبيوتر.</p></div></div></section></main>;
+}
+
+function Feature({ icon: Icon, title, text }: { icon: typeof Store; title: string; text: string }) { return <div className="rounded-2xl border border-border/70 p-4"><Icon className="mb-3 size-5 text-primary"/><b className="block text-sm">{title}</b><p className="mt-1 text-xs leading-6 text-muted-foreground">{text}</p></div>; }

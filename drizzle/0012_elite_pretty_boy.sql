@@ -1,0 +1,1 @@
+ALTER TABLE `shops` ADD `storefront_template` varchar(32) DEFAULT 'classic' NOT NULL;
