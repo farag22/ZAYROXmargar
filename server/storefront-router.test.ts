@@ -22,7 +22,7 @@ import * as db from "./db";
 import { appRouter } from "./routers";
 
 const owner = {
-  id: 5, openId: "shop-owner", name: "Shop Owner", email: null, loginMethod: null,
+  id: 5, openId: "shop-owner", name: "Shop Owner", email: null, passwordHash: null, loginMethod: null,
   role: "shop_owner" as const, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date(),
 };
 

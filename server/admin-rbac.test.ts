@@ -7,7 +7,7 @@ const guardedRouter = router({ protectedValue: adminProcedure.query(() => "ok") 
 
 function context(role: "shop_owner" | "super_admin"): TrpcContext {
   return {
-    user: { id: 9, openId: "role-test", name: "Role Test", email: null, loginMethod: null, role, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() },
+    user: { id: 9, openId: "role-test", name: "Role Test", email: null, passwordHash: null, loginMethod: null, role, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() },
     req: {} as TrpcContext["req"],
     res: {} as TrpcContext["res"],
   };

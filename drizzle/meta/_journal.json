@@ -92,6 +92,13 @@
       "when": 1787533094192,
       "tag": "0012_elite_pretty_boy",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "5",
+      "when": 1787534094192,
+      "tag": "0013_local_password_auth",
+      "breakpoints": true
     }
   ]
 }

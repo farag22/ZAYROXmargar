@@ -12,7 +12,7 @@
 | Output Directory | `dist/public` |
 | Node.js | 22.x |
 
-أضف متغيرات البيئة في **Project Settings → Environment Variables** بدلاً من رفع ملف `.env`. تحتاج الواجهة والخادم إلى قيم قاعدة البيانات والمصادقة التالية: `DATABASE_URL` و`JWT_SECRET` و`OAUTH_SERVER_URL` و`VITE_APP_ID` و`VITE_OAUTH_PORTAL_URL` و`OWNER_OPEN_ID` و`BUILT_IN_FORGE_API_URL` و`BUILT_IN_FORGE_API_KEY` و`VITE_FRONTEND_FORGE_API_URL` و`VITE_FRONTEND_FORGE_API_KEY`. أضف أيضاً متغيرات الهوية والتحليلات والتخزين المعتمدة في بيئة مشروعك مثل `VITE_APP_TITLE` و`VITE_APP_LOGO` و`VITE_ANALYTICS_ENDPOINT` و`VITE_ANALYTICS_WEBSITE_ID` و`VODAFONE_CASH_NUMBER` عند استخدامها.
+أضف متغيرات البيئة في **Project Settings → Environment Variables** بدلاً من رفع ملف `.env`. تحتاج الواجهة والخادم إلى: `DATABASE_URL` (رابط PostgreSQL من Supabase) و`JWT_SECRET` و`OWNER_OPEN_ID` و`VODAFONE_CASH_NUMBER` عند استخدامها.
 
 بعد أول نشر، حدّث عناوين إعادة توجيه OAuth في مزود المصادقة لتشمل نطاق Vercel النهائي ومسار `/api/oauth/callback` إذا كان مزودك يتطلب قائمة عناوين مسموحة. ثم اختبر مسارات `/store/<slug>` و`/track-order` و`/api/trpc` مباشرةً، بالإضافة إلى تسجيل الدخول.
 

@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, gte, inArray, like, lte, sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import {
   adminAuditLogs,
   categories,
@@ -24,10 +26,12 @@ import {
   subscriptions,
   type InsertUser,
   type ShopMemberRole,
+  type User,
   users,
 } from "../drizzle/schema";
 import { calculateSaleTotals, canCreateShop, customerBalances } from "./domain";
 import { ENV } from "./_core/env";
+import { hashPassword, normalizeEmail } from "./_core/password";
 import { storagePut } from "./storage";
 import { getPaymentProvider } from "./payments/providers";
 import { WALLET_PAYMENT_METHODS, type WalletPaymentMethod } from "../shared/commerce";
@@ -70,10 +74,17 @@ function persistedLegacyStatus(status: StorefrontOrderStatus): "new" | "processi
 }
 
 let _db: ReturnType<typeof drizzle> | null = null;
+let _sql: ReturnType<typeof postgres> | null = null;
 
 export async function getDb() {
-  if (!_db && process.env.DATABASE_URL) {
-    _db = drizzle(process.env.DATABASE_URL);
+  const url = ENV.databaseUrl;
+  if (!_db && url) {
+    _sql = postgres(url, {
+      max: 5,
+      prepare: false,
+      ssl: url.includes("supabase.co") || url.includes("pooler.supabase.com") ? "require" : undefined,
+    });
+    _db = drizzle(_sql);
   }
   return _db;
 }
@@ -90,7 +101,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   if (!db) return;
   const values: InsertUser = { openId: user.openId, lastSignedIn: user.lastSignedIn ?? new Date() };
   const updateSet: Record<string, unknown> = { lastSignedIn: values.lastSignedIn };
-  (["name", "email", "loginMethod"] as const).forEach(field => {
+  (["name", "email", "loginMethod", "passwordHash"] as const).forEach(field => {
     if (user[field] !== undefined) {
       values[field] = user[field] ?? null;
       updateSet[field] = user[field] ?? null;
@@ -103,13 +114,46 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     values.role = "super_admin";
     updateSet.role = "super_admin";
   }
-  await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+  await db.insert(users).values(values).onConflictDoUpdate({ target: users.openId, set: updateSet });
 }
 
 export async function getUserByOpenId(openId: string) {
   const db = await getDb();
   if (!db) return undefined;
   return (await db.select().from(users).where(eq(users.openId, openId)).limit(1))[0];
+}
+
+export async function getUserByEmail(email: string) {
+  const db = await requireDb();
+  const normalized = normalizeEmail(email);
+  return (await db.select().from(users).where(eq(users.email, normalized)).limit(1))[0];
+}
+
+export async function createLocalUser(input: { name: string; email: string; password: string }): Promise<User> {
+  const db = await requireDb();
+  const email = normalizeEmail(input.email);
+  const existing = (await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1))[0];
+  if (existing) throw new Error("EMAIL_TAKEN");
+  const openId = `local_${randomUUID()}`;
+  const passwordHash = await hashPassword(input.password);
+  const role = openId === ENV.ownerOpenId ? "super_admin" : "shop_owner";
+  await db.insert(users).values({
+    openId,
+    name: input.name.trim(),
+    email,
+    passwordHash,
+    loginMethod: "password",
+    role,
+    lastSignedIn: new Date(),
+  });
+  const created = await getUserByOpenId(openId);
+  if (!created) throw new Error("USER_CREATE_FAILED");
+  return created;
+}
+
+export async function recordLocalSignIn(userId: number) {
+  const db = await requireDb();
+  await db.update(users).set({ lastSignedIn: new Date() }).where(eq(users.id, userId));
 }
 
 export async function listUserShops(userId: number) {
@@ -152,13 +196,27 @@ export async function assertShopAccess(userId: number, shopId: number, allowedRo
 }
 
 export async function listPlans(includeInactive = false) {
+  await ensureDefaultPlans();
   const db = await requireDb();
   return db.select().from(plans).where(includeInactive ? undefined : eq(plans.isActive, 1)).orderBy(plans.priceCents);
 }
 
+async function ensureDefaultPlans() {
+  const db = await requireDb();
+  await db.insert(plans).values([
+    { code: "free", name: "مجانية", priceCents: 0, maxProducts: 50, maxShops: 1, reportsEnabled: 0, pdfExportEnabled: 0, isActive: 1 },
+    { code: "basic", name: "أساسية", priceCents: 9900, maxProducts: 300, maxShops: 3, reportsEnabled: 1, pdfExportEnabled: 0, isActive: 1 },
+    { code: "pro", name: "احترافية", priceCents: 19900, maxProducts: 5000, maxShops: 10, reportsEnabled: 1, pdfExportEnabled: 1, isActive: 1 },
+  ]).onConflictDoNothing();
+}
+
 export async function getPlanDefinition(code: AppPlan) {
   const db = await requireDb();
-  const plan = (await db.select().from(plans).where(eq(plans.code, code)).limit(1))[0];
+  let plan = (await db.select().from(plans).where(eq(plans.code, code)).limit(1))[0];
+  if (!plan) {
+    await ensureDefaultPlans();
+    plan = (await db.select().from(plans).where(eq(plans.code, code)).limit(1))[0];
+  }
   if (!plan) throw new Error("PLAN_CONFIGURATION_MISSING");
   return plan;
 }
@@ -204,7 +262,7 @@ export async function createShop(userId: number, input: { name: string; currency
   const plan = await getPlanDefinition(currentPlan);
   if (!plan.isActive || !canCreateShop(Number(count), plan.maxShops)) throw new Error("PLAN_SHOP_LIMIT");
   return db.transaction(async tx => {
-    const [created] = await tx.insert(shops).values({ ...input, ownerUserId: userId }).$returningId();
+    const [created] = await tx.insert(shops).values({ ...input, ownerUserId: userId }).returning({ id: shops.id });
     await tx.update(shops).set({ slug: buildStoreSlug(input.name, created.id) }).where(eq(shops.id, created.id));
     await tx.insert(shopMembers).values({ shopId: created.id, userId, role: "owner" });
     await tx.insert(subscriptions).values({ shopId: created.id, plan: "free", status: "active" });
@@ -336,14 +394,13 @@ export async function createStorefrontOrder(slug: string, input: {
       subtotalCents, deliveryGovernorate: governorate, deliveryFeeCents, totalCents, paymentMode: input.payment.mode, paymentMethod: paymentMethod.method,
       paymentAccountNumber: paymentMethod.accountNumber, paymentAmountCents, paymentStatus: manualPaymentStatus(), paymentPayerPhone: input.payment.payerPhone?.trim() || null,
       paymentReference: input.payment.reference?.trim() || null, paymentProofUrl: proof.url,
-    }).$returningId();
+    }).returning({ id: storefrontOrders.id });
     await tx.insert(storefrontOrderStatusEvents).values({ shopId: shop.id, orderId: created.id, status: "new", channel: "in_app", message: orderStatusMessages.new });
     await tx.insert(storefrontOrderItems).values(matched.map(product => { const quantity = quantityByProduct.get(product.id) ?? 0; return { shopId: shop.id, orderId: created.id, productId: product.id, productName: product.name, productImage: product.productImage, unitPriceCents: product.sellingPriceCents, quantity, lineTotalCents: product.sellingPriceCents * quantity }; }));
     for (const product of matched) {
       const quantity = quantityByProduct.get(product.id) ?? 0;
-      const updateResult = await tx.update(products).set({ quantityInStock: sql`${products.quantityInStock} - ${quantity}` }).where(and(eq(products.id, product.id), eq(products.shopId, shop.id), eq(products.isActive, 1), gte(products.quantityInStock, quantity)));
-      const driverResult = Array.isArray(updateResult) ? updateResult[0] : updateResult;
-      if (Number((driverResult as { affectedRows?: number }).affectedRows ?? 0) !== 1) throw new Error("INSUFFICIENT_STOCK");
+      const updated = await tx.update(products).set({ quantityInStock: sql`${products.quantityInStock} - ${quantity}` }).where(and(eq(products.id, product.id), eq(products.shopId, shop.id), eq(products.isActive, 1), gte(products.quantityInStock, quantity))).returning({ id: products.id });
+      if (updated.length !== 1) throw new Error("INSUFFICIENT_STOCK");
       await tx.insert(inventoryMovements).values({ shopId: shop.id, productId: product.id, type: "sale", quantityDelta: -quantity, note: `طلب متجر ${orderNo}`, createdByUserId: shop.ownerUserId });
     }
     await tx.insert(notifications).values({ shopId: shop.id, type: "system", title: "طلب متجر جديد", body: `وصل طلب ${orderNo} إلى ${governorate} بقيمة ${(totalCents / 100).toFixed(2)} ${shop.currency} وبانتظار مراجعة الدفع.`, entityType: "storefront_order", entityId: created.id });
@@ -392,7 +449,7 @@ export async function getPublicOrderTracking(orderNo: string, customerPhone: str
   const normalizedOrderNo = orderNo.trim().toUpperCase();
   const normalizedPhone = customerPhone.replace(/[^0-9]/g, "");
   if (normalizedPhone.length < 7) throw new Error("ORDER_NOT_FOUND");
-  const phoneDigits = sql`REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(${storefrontOrders.customerPhone}, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '')`;
+  const phoneDigits = sql`regexp_replace(${storefrontOrders.customerPhone}, '[\\s\\-()+]', '', 'g')`;
   const result = (await db.select({ order: storefrontOrders, shopName: shops.name, shopLogoUrl: shops.logoUrl, shopSlug: shops.slug }).from(storefrontOrders).innerJoin(shops, eq(storefrontOrders.shopId, shops.id)).where(and(eq(storefrontOrders.orderNo, normalizedOrderNo), sql`${phoneDigits} = ${normalizedPhone}`)).limit(1))[0];
   if (!result) throw new Error("ORDER_NOT_FOUND");
   const events = await db.select({ status: storefrontOrderStatusEvents.status, message: storefrontOrderStatusEvents.message, createdAt: storefrontOrderStatusEvents.createdAt }).from(storefrontOrderStatusEvents).where(and(eq(storefrontOrderStatusEvents.orderId, result.order.id), eq(storefrontOrderStatusEvents.shopId, result.order.shopId))).orderBy(asc(storefrontOrderStatusEvents.createdAt));
@@ -416,7 +473,7 @@ export async function listCategories(userId: number, shopId: number) {
 export async function createCategory(userId: number, shopId: number, input: { name: string; color: string }) {
   await assertShopAccess(userId, shopId, ["owner", "manager"]);
   const db = await requireDb();
-  const [created] = await db.insert(categories).values({ shopId, ...input }).$returningId();
+  const [created] = await db.insert(categories).values({ shopId, ...input }).returning({ id: categories.id });
   return created;
 }
 
@@ -463,7 +520,7 @@ export async function createProduct(userId: number, shopId: number, input: {
     const category = (await db.select({ id: categories.id }).from(categories).where(and(eq(categories.id, input.categoryId), eq(categories.shopId, shopId))).limit(1))[0];
     if (!category) throw new Error("INVALID_CATEGORY");
   }
-  const [created] = await db.insert(products).values({ shopId, name: input.name, sku: input.sku || null, categoryId: input.categoryId ?? null, sellingPriceCents: input.sellingPriceCents, costPriceCents: input.costPriceCents, quantityInStock: input.quantityInStock, reorderPoint: input.reorderPoint }).$returningId();
+  const [created] = await db.insert(products).values({ shopId, name: input.name, sku: input.sku || null, categoryId: input.categoryId ?? null, sellingPriceCents: input.sellingPriceCents, costPriceCents: input.costPriceCents, quantityInStock: input.quantityInStock, reorderPoint: input.reorderPoint }).returning({ id: products.id });
   if (input.productImageBase64 && input.productImageContentType) {
     const image = await uploadProductImage(shopId, created.id, input.productImageBase64, input.productImageContentType);
     await db.update(products).set({ productImage: image.url }).where(and(eq(products.id, created.id), eq(products.shopId, shopId)));
@@ -530,7 +587,7 @@ export async function createSale(userId: number, shopId: number, input: { lines:
     const [created] = await tx.insert(sales).values({
       shopId, invoiceNo, customerId: input.customerId ?? null, totalCents: totals.totalCents, paidCents: input.paidCents, debtCents: totals.debtCents,
       discountCents: input.discountCents, paymentMethod: totals.debtCents > 0 ? "credit" : input.paymentMethod, note: input.note || null, createdByUserId: userId,
-    }).$returningId();
+    }).returning({ id: sales.id });
     await tx.insert(saleItems).values(normalizedLines.map(line => ({
       shopId, saleId: created.id, productId: line.productId, productName: line.product.name, unitPriceCents: line.unitPriceCents,
       costPriceCents: line.costPriceCents, quantity: line.quantity, lineTotalCents: line.quantity * line.unitPriceCents,
@@ -582,7 +639,7 @@ export async function listCustomersWithBalances(userId: number, shopId: number, 
 export async function createCustomer(userId: number, shopId: number, input: { name: string; phone?: string; email?: string; note?: string }) {
   await assertShopAccess(userId, shopId, ["owner", "manager", "cashier"]);
   const db = await requireDb();
-  const [created] = await db.insert(customers).values({ shopId, name: input.name, phone: input.phone || null, email: input.email || null, note: input.note || null }).$returningId();
+  const [created] = await db.insert(customers).values({ shopId, name: input.name, phone: input.phone || null, email: input.email || null, note: input.note || null }).returning({ id: customers.id });
   return created;
 }
 
@@ -595,7 +652,7 @@ export async function recordDebtPayment(userId: number, shopId: number, input: {
   const entries = await db.select().from(debtTransactions).where(and(eq(debtTransactions.shopId, shopId), eq(debtTransactions.customerId, input.customerId)));
   const balance = customerBalances(entries.map(entry => ({ customerId: entry.customerId, type: entry.type, amountCents: entry.amountCents })))[input.customerId] ?? 0;
   if (input.amountCents > balance) throw new Error("PAYMENT_EXCEEDS_BALANCE");
-  const [created] = await db.insert(debtTransactions).values({ shopId, customerId: input.customerId, type: "payment", amountCents: input.amountCents, note: input.note || null, createdByUserId: userId }).$returningId();
+  const [created] = await db.insert(debtTransactions).values({ shopId, customerId: input.customerId, type: "payment", amountCents: input.amountCents, note: input.note || null, createdByUserId: userId }).returning({ id: debtTransactions.id });
   return created;
 }
 
@@ -609,7 +666,7 @@ export async function createExpense(userId: number, shopId: number, input: { cat
   await assertShopAccess(userId, shopId, ["owner", "manager"]);
   if (input.amountCents <= 0) throw new Error("INVALID_AMOUNT");
   const db = await requireDb();
-  const [created] = await db.insert(expenses).values({ shopId, category: input.category, amountCents: input.amountCents, note: input.note || null, spentAt: input.spentAt ?? new Date(), createdByUserId: userId }).$returningId();
+  const [created] = await db.insert(expenses).values({ shopId, category: input.category, amountCents: input.amountCents, note: input.note || null, spentAt: input.spentAt ?? new Date(), createdByUserId: userId }).returning({ id: expenses.id });
   return created;
 }
 
@@ -720,7 +777,7 @@ export async function createVodafoneCashRequest(userId: number, shopId: number, 
   const [created] = await db.insert(paymentRequests).values({
     shopId, requestedByUserId: userId, orderCode, plan: input.plan, billingMonths: input.billingMonths, amountCents,
     payerPhone: input.payerPhone.replace(/[\s-]/g, ""), transferReference: input.transferReference || null, receiptKey: receipt.key, receiptUrl: receipt.url,
-  }).$returningId();
+  }).returning({ id: paymentRequests.id });
   await db.insert(paymentAuditLogs).values({ paymentRequestId: created.id, actorUserId: userId, action: "created", detail: `طلب ${input.plan} لمدة ${input.billingMonths} شهر` });
   return { id: created.id, orderCode, amountCents, receiptUrl: receipt.url, status: "pending" as const };
 }

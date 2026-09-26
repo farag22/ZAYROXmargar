@@ -11,7 +11,7 @@ import * as db from "./db";
 import { appRouter } from "./routers";
 
 function context(role: "shop_owner" | "super_admin"): TrpcContext {
-  return { user: { id: 33, openId: "template-admin", name: "Admin", email: null, loginMethod: null, role, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() }, req: {} as TrpcContext["req"], res: {} as TrpcContext["res"] };
+  return { user: { id: 33, openId: "template-admin", name: "Admin", email: null, passwordHash: null, loginMethod: null, role, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() }, req: {} as TrpcContext["req"], res: {} as TrpcContext["res"] };
 }
 
 describe("قوالب واجهات المتاجر", () => {

@@ -8,7 +8,7 @@
 
 | المجال | التنفيذ في الـMVP |
 | --- | --- |
-| المصادقة | OAuth مدمج مع جلسات محمية |
+| المصادقة | تسجيل ودخول محلي بالبريد وكلمة المرور مع جلسات محمية |
 | العزل | عضويات محلات وأدوار owner / manager / cashier |
 | المخزون | حد إعادة طلب، حركات مخزون، تنبيه فوري عند انخفاض الكمية |
 | المبيعات | فواتير بحثية، إجماليات دقيقة، تحديث مخزون ذري، دين اختياري للعميل |
@@ -23,7 +23,10 @@
 
 ## التشغيل محلياً
 
-يتطلب المشروع Node.js وpnpm وإعداد متغيرات المنصة وقاعدة MySQL/TiDB التي يجهزها القالب. شغّل الأوامر التالية من جذر المشروع:
+يتطلب المشروع Node.js وpnpm وقاعدة PostgreSQL عبر **Supabase**. انسخ `.env.example` إلى `.env` وضع `DATABASE_URL` من:
+`Supabase → Settings → Database → Connection string (URI)`.
+
+شغّل الأوامر التالية من جذر المشروع:
 
 ```bash
 pnpm install
@@ -32,12 +35,13 @@ pnpm test
 pnpm dev
 ```
 
-تُدار الجداول عبر Drizzle. عند تغيير `drizzle/schema.ts`، أنشئ ترحيلاً ثم راجعه قبل تطبيقه على قاعدة البيانات. لا تستخدم أوامر إسقاط أو إعادة تهيئة على بيانات العملاء.
+تُدار الجداول عبر Drizzle على PostgreSQL. بعد ضبط `DATABASE_URL` طبّق المخطط:
 
 ```bash
-pnpm drizzle-kit generate
-pnpm drizzle-kit migrate
+pnpm db:push
 ```
+
+أو نفّذ `supabase/schema.sql` من محرر SQL في لوحة Supabase.
 
 ## إعداد Vodafone Cash وتغيير الأسعار
 

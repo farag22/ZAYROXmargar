@@ -177,6 +177,7 @@ export default defineConfig({
       ".manus-asia.computer",
       ".manuscomputer.ai",
       ".manusvm.computer",
+      ".monkeycode-ai.live",
       "localhost",
       "127.0.0.1",
     ],

@@ -6,7 +6,7 @@ describe("subscriptions.paymentInstructions", () => {
   it("يعيد تعليمات Vodafone Cash من إعدادات الخادم بصيغة رقم هاتف صالحة", async () => {
     const caller = appRouter.createCaller({
       user: {
-        id: 1, openId: "test-user", name: "Test User", email: "test@example.com", loginMethod: "manus", role: "shop_owner",
+        id: 1, openId: "test-user", name: "Test User", email: "test@example.com", passwordHash: null, loginMethod: "password", role: "shop_owner",
         createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date(),
       },
       req: {} as TrpcContext["req"],

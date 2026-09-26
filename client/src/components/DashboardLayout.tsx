@@ -3,7 +3,6 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import { BarChart3, Boxes, CreditCard, LayoutDashboard, LogOut, Package, PackageCheck, Settings, ShoppingCart, Store, UsersRound, WalletCards } from "lucide-react";
 import { useLocation } from "wouter";
@@ -23,8 +22,9 @@ const menu = [
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { loading, user } = useAuth();
+  const [, setLocation] = useLocation();
   if (loading) return <DashboardLayoutSkeleton />;
-  if (!user) return <main className="min-h-screen grid place-items-center p-6"><section className="w-full max-w-md rounded-[2rem] bg-card p-9 text-center shadow-xl shadow-primary/10"><div className="mx-auto mb-5 grid size-14 place-items-center rounded-2xl bg-primary text-primary-foreground"><Store /></div><h1 className="text-2xl font-extrabold">مرحباً بك في ZAYROX</h1><p className="mt-3 text-sm leading-7 text-muted-foreground">سجّل الدخول للوصول الآمن إلى بيانات محلك ومبيعاتك.</p><Button className="mt-7 w-full" size="lg" onClick={() => startLogin()}>تسجيل الدخول</Button></section></main>;
+  if (!user) return <main className="min-h-screen grid place-items-center p-6"><section className="w-full max-w-md rounded-[2rem] bg-card p-9 text-center shadow-xl shadow-primary/10"><div className="mx-auto mb-5 grid size-14 place-items-center rounded-2xl bg-primary text-primary-foreground"><Store /></div><h1 className="text-2xl font-extrabold">مرحباً بك في ZAYROX</h1><p className="mt-3 text-sm leading-7 text-muted-foreground">سجّل الدخول للوصول الآمن إلى بيانات محلك ومبيعاتك.</p><Button className="mt-7 w-full" size="lg" onClick={() => setLocation("/login")}>تسجيل الدخول</Button><Button className="mt-3 w-full" size="lg" variant="outline" onClick={() => setLocation("/register")}>إنشاء حساب</Button></section></main>;
   return <SidebarProvider defaultOpen><DashboardContent>{children}</DashboardContent></SidebarProvider>;
 }
 

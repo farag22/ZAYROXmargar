@@ -1,8 +1,10 @@
-import { COOKIE_NAME } from "@shared/const";
+import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import * as db from "./db";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { verifyPassword } from "./_core/password";
+import { sdk } from "./_core/sdk";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { storefrontTemplateCodes } from "../shared/storefrontTemplates";
@@ -26,7 +28,59 @@ function todayRange() {
 export const appRouter = router({
   system: systemRouter,
   auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
+    me: publicProcedure.query(opts => {
+      const user = opts.ctx.user;
+      if (!user) return null;
+      const { passwordHash: _passwordHash, ...safeUser } = user;
+      return safeUser;
+    }),
+    register: publicProcedure
+      .input(z.object({
+        name: text(80),
+        email: z.string().trim().email().max(320),
+        password: z.string().min(8).max(72),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "أنت مسجّل الدخول بالفعل." });
+        }
+        try {
+          const user = await db.createLocalUser(input);
+          const sessionToken = await sdk.createSessionToken(user.openId, {
+            name: user.name || input.name,
+            expiresInMs: ONE_YEAR_MS,
+          });
+          ctx.res.cookie(COOKIE_NAME, sessionToken, { ...getSessionCookieOptions(ctx.req), maxAge: ONE_YEAR_MS });
+          return { success: true } as const;
+        } catch (error) {
+          if (error instanceof Error && error.message === "EMAIL_TAKEN") {
+            throw new TRPCError({ code: "CONFLICT", message: "هذا البريد الإلكتروني مستخدم بالفعل." });
+          }
+          throw error;
+        }
+      }),
+    login: publicProcedure
+      .input(z.object({
+        email: z.string().trim().email().max(320),
+        password: z.string().min(1).max(72),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const user = await db.getUserByEmail(input.email);
+        if (!user?.passwordHash) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "البريد الإلكتروني أو كلمة المرور غير صحيحة." });
+        }
+        const valid = await verifyPassword(input.password, user.passwordHash);
+        if (!valid) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "البريد الإلكتروني أو كلمة المرور غير صحيحة." });
+        }
+        await db.recordLocalSignIn(user.id);
+        const sessionToken = await sdk.createSessionToken(user.openId, {
+          name: user.name || user.email || "user",
+          expiresInMs: ONE_YEAR_MS,
+        });
+        ctx.res.cookie(COOKIE_NAME, sessionToken, { ...getSessionCookieOptions(ctx.req), maxAge: ONE_YEAR_MS });
+        return { success: true } as const;
+      }),
     logout: publicProcedure.mutation(({ ctx }) => {
       ctx.res.clearCookie(COOKIE_NAME, { ...getSessionCookieOptions(ctx.req), maxAge: -1 });
       return { success: true } as const;
