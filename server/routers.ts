@@ -1,4 +1,4 @@
-import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { COOKIE_NAME, ONE_YEAR_MS } from "../shared/const";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import * as db from "./db";
@@ -73,16 +73,14 @@ export const appRouter = router({
 
           return { success: true } as const;
         } catch (error) {
+          if (error instanceof TRPCError) throw error;
           if (error instanceof Error && error.message === "EMAIL_TAKEN") {
             throw new TRPCError({ code: "CONFLICT", message: "هذا البريد الإلكتروني مستخدم بالفعل." });
           }
-          if (error instanceof TRPCError) {
-            throw error;
-          }
-          console.error("REGISTER_ERROR:", error);
+          console.error("[auth.register]", error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: error instanceof Error ? error.message : "حدث خطأ في الخادم أثناء إنشاء الحساب.",
+            message: "تعذر إنشاء الحساب حالياً. تحقق من DATABASE_URL وJWT_SECRET على Vercel.",
           });
         }
       }),
@@ -110,10 +108,10 @@ export const appRouter = router({
           return { success: true } as const;
         } catch (error) {
           if (error instanceof TRPCError) throw error;
-          console.error("LOGIN_ERROR:", error);
+          console.error("[auth.login]", error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: error instanceof Error ? error.message : "حدث خطأ أثناء تسجيل الدخول.",
+            message: "تعذر تسجيل الدخول حالياً. تحقق من DATABASE_URL وJWT_SECRET على Vercel.",
           });
         }
       }),

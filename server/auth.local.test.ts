@@ -112,6 +112,17 @@ describe("auth.register و auth.login", () => {
     expect(cookies[0]?.name).toBe(COOKIE_NAME);
   });
 
+  it("يعيد خطأ JSON عند فشل غير متوقع أثناء الدخول", async () => {
+    vi.mocked(db.getUserByEmail).mockRejectedValueOnce(new Error("db down"));
+    const { ctx } = publicContext();
+    await expect(appRouter.createCaller(ctx).auth.login({
+      email: "owner@example.com",
+      password: "Secret123",
+    })).rejects.toMatchObject<Partial<TRPCError>>({
+      code: "INTERNAL_SERVER_ERROR",
+    });
+  });
+
   it("يرفض كلمة مرور خاطئة", async () => {
     vi.mocked(db.getUserByEmail).mockResolvedValueOnce(sampleUser);
     vi.mocked(verifyPassword).mockResolvedValueOnce(false);

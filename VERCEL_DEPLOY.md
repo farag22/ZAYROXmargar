@@ -12,7 +12,13 @@
 | Output Directory | `dist/public` |
 | Node.js | 22.x |
 
-أضف متغيرات البيئة في **Project Settings → Environment Variables** بدلاً من رفع ملف `.env`. تحتاج الواجهة والخادم إلى: `DATABASE_URL` (رابط PostgreSQL من Supabase) و`JWT_SECRET` و`OWNER_OPEN_ID` و`VODAFONE_CASH_NUMBER` عند استخدامها.
+أضف متغيرات البيئة في **Project Settings → Environment Variables** بدلاً من رفع ملف `.env`. المتغيرات التي يقرأها الكود فعليًا:
+
+- `DATABASE_URL` (مطلوب) رابط Transaction pooler من Supabase على المنفذ `6543`. إذا كانت كلمة المرور تبدأ بـ `@` اكتبها `%40`.
+- `JWT_SECRET` (مطلوب على Vercel) سر طويل لتوقيع جلسة الدخول.
+- `OWNER_OPEN_ID` و`VODAFONE_CASH_NUMBER` اختياريان.
+
+`SUPABASE_URL` و`SUPABASE_PUBLISHABLE_KEY` لا يستخدمان في الكود.
 
 بعد أول نشر، حدّث عناوين إعادة توجيه OAuth في مزود المصادقة لتشمل نطاق Vercel النهائي ومسار `/api/oauth/callback` إذا كان مزودك يتطلب قائمة عناوين مسموحة. ثم اختبر مسارات `/store/<slug>` و`/track-order` و`/api/trpc` مباشرةً، بالإضافة إلى تسجيل الدخول.
 

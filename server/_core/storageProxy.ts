@@ -5,12 +5,12 @@ export function registerStorageProxy(app: Express) {
   app.get("/manus-storage/*", async (req, res) => {
     const key = (req.params as Record<string, string>)[0];
     if (!key) {
-      res.status(400).send("Missing storage key");
+      res.status(400).json({ error: "missing_storage_key" });
       return;
     }
 
     if (!ENV.forgeApiUrl || !ENV.forgeApiKey) {
-      res.status(500).send("Storage proxy not configured");
+      res.status(500).json({ error: "storage_proxy_not_configured" });
       return;
     }
 
@@ -28,13 +28,13 @@ export function registerStorageProxy(app: Express) {
       if (!forgeResp.ok) {
         const body = await forgeResp.text().catch(() => "");
         console.error(`[StorageProxy] forge error: ${forgeResp.status} ${body}`);
-        res.status(502).send("Storage backend error");
+        res.status(502).json({ error: "storage_backend_error" });
         return;
       }
 
       const { url } = (await forgeResp.json()) as { url: string };
       if (!url) {
-        res.status(502).send("Empty signed URL from backend");
+        res.status(502).json({ error: "empty_signed_url" });
         return;
       }
 
@@ -42,7 +42,7 @@ export function registerStorageProxy(app: Express) {
       res.redirect(307, url);
     } catch (err) {
       console.error("[StorageProxy] failed:", err);
-      res.status(502).send("Storage proxy error");
+      res.status(502).json({ error: "storage_proxy_error" });
     }
   });
 }

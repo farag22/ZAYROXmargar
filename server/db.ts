@@ -30,6 +30,7 @@ import {
   users,
 } from "../drizzle/schema";
 import { calculateSaleTotals, canCreateShop, customerBalances } from "./domain";
+import { isDirectSupabaseHost } from "./_core/databaseUrl";
 import { ENV } from "./_core/env";
 import { hashPassword, normalizeEmail } from "./_core/password";
 import { storagePut } from "./storage";
@@ -78,9 +79,14 @@ let _sql: ReturnType<typeof postgres> | null = null;
 
 export async function getDb() {
   const url = ENV.databaseUrl;
+  if (url && isDirectSupabaseHost(url)) {
+    throw new Error("استخدم Session pooler من Supabase (aws-0-....pooler.supabase.com) وليس db.xxx.supabase.co");
+  }
   if (!_db && url) {
     _sql = postgres(url, {
-      max: 5,
+      max: 1,
+      idle_timeout: 20,
+      connect_timeout: 15,
       prepare: false,
       ssl: url.includes("supabase.co") || url.includes("pooler.supabase.com") ? "require" : undefined,
     });
@@ -137,7 +143,7 @@ export async function createLocalUser(input: { name: string; email: string; pass
   const openId = `local_${randomUUID()}`;
   const passwordHash = await hashPassword(input.password);
   const role = openId === ENV.ownerOpenId ? "super_admin" : "shop_owner";
-  await db.insert(users).values({
+  const inserted = await db.insert(users).values({
     openId,
     name: input.name.trim(),
     email,
@@ -145,8 +151,8 @@ export async function createLocalUser(input: { name: string; email: string; pass
     loginMethod: "password",
     role,
     lastSignedIn: new Date(),
-  });
-  const created = await getUserByOpenId(openId);
+  }).returning();
+  const created = inserted[0];
   if (!created) throw new Error("USER_CREATE_FAILED");
   return created;
 }

@@ -51,6 +51,25 @@ const trpcClient = trpc.createClient({
         return globalThis.fetch(input, {
           ...(init ?? {}),
           credentials: "include",
+        }).then(async response => {
+          const contentType = response.headers.get("content-type") || "";
+          if (contentType.includes("application/json")) return response;
+          const text = await response.text();
+          const message = !text || text.startsWith("<") || text.startsWith("A server") || text.includes("Unexpected")
+            ? "تعذر الاتصال بالخادم. راجع DATABASE_URL وJWT_SECRET على Vercel ثم أعد النشر."
+            : text.slice(0, 180);
+          return new Response(JSON.stringify({
+            error: {
+              json: {
+                message,
+                code: -32603,
+                data: { code: "INTERNAL_SERVER_ERROR", httpStatus: response.status || 500 },
+              },
+            },
+          }), {
+            status: response.status || 500,
+            headers: { "content-type": "application/json" },
+          });
         });
       },
     }),

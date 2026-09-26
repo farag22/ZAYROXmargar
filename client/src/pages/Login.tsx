@@ -6,8 +6,16 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Store, Loader2 } from "lucide-react";
 
+function formatAuthError(message: string) {
+  const text = message || "";
+  if (!text || text.startsWith("A server") || text.includes("JSON") || text.includes("Unexpected") || text.startsWith("<")) {
+    return "تعذر الاتصال بالخادم. راجع DATABASE_URL وJWT_SECRET على Vercel ثم أعد النشر.";
+  }
+  return text;
+}
+
 export default function Login() {
-  const [, setLocation] = useLocation();
+  const [, _setLocation] = useLocation();
   const [isRegistering, setIsRegistering] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -19,7 +27,7 @@ export default function Login() {
       window.location.href = "/";
     },
     onError: (error) => {
-      setErrorMessage(error.message || "حدث خطأ أثناء تسجيل الدخول.");
+      setErrorMessage(formatAuthError(error.message || "حدث خطأ أثناء تسجيل الدخول."));
     },
   });
 
@@ -28,7 +36,7 @@ export default function Login() {
       window.location.href = "/";
     },
     onError: (error) => {
-      setErrorMessage(error.message || "حدث خطأ أثناء إنشاء الحساب.");
+      setErrorMessage(formatAuthError(error.message || "حدث خطأ أثناء إنشاء الحساب."));
     },
   });
 
