@@ -10,7 +10,7 @@
         console.log("1. Starting registration for:", input.email);
 
         if (ctx.user) {
-          throw new TRpcError({ code: "BAD_REQUEST", message: "أنت مسجّل الدخول بالفعل." });
+          throw new TRPCError({ code: "BAD_REQUEST", message: "أنت مسجّل الدخول بالفعل." });
         }
 
         const email = input.email.trim().toLowerCase();
