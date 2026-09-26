@@ -79,16 +79,17 @@ let _sql: ReturnType<typeof postgres> | null = null;
 
 export async function getDb() {
   const url = ENV.databaseUrl;
-  if (url && isDirectSupabaseHost(url)) {
-    throw new Error("استخدم Session pooler من Supabase (aws-0-....pooler.supabase.com) وليس db.xxx.supabase.co");
+  if (!url) return null;
+  if (isDirectSupabaseHost(url)) {
+    throw new Error("DB_DIRECT_HOST");
   }
-  if (!_db && url) {
+  if (!_db) {
     _sql = postgres(url, {
       max: 1,
-      idle_timeout: 20,
-      connect_timeout: 15,
+      idle_timeout: 10,
+      connect_timeout: 5,
       prepare: false,
-      ssl: url.includes("supabase.co") || url.includes("pooler.supabase.com") ? "require" : undefined,
+      ssl: "require",
     });
     _db = drizzle(_sql);
   }
@@ -96,9 +97,17 @@ export async function getDb() {
 }
 
 async function requireDb() {
-  const db = await getDb();
-  if (!db) throw new Error("قاعدة البيانات غير متاحة حالياً");
-  return db;
+  try {
+    const db = await getDb();
+    if (!db) throw new Error("DB_UNAVAILABLE");
+    return db;
+  } catch (error) {
+    if (error instanceof Error && (error.message === "DB_DIRECT_HOST" || error.message === "DB_UNAVAILABLE")) {
+      throw error;
+    }
+    console.error("[db.requireDb]", error);
+    throw new Error("DB_UNAVAILABLE");
+  }
 }
 
 export async function upsertUser(user: InsertUser): Promise<void> {
@@ -124,37 +133,58 @@ export async function upsertUser(user: InsertUser): Promise<void> {
 }
 
 export async function getUserByOpenId(openId: string) {
-  const db = await getDb();
-  if (!db) return undefined;
-  return (await db.select().from(users).where(eq(users.openId, openId)).limit(1))[0];
+  try {
+    const db = await getDb();
+    if (!db) return undefined;
+    return (await db.select().from(users).where(eq(users.openId, openId)).limit(1))[0];
+  } catch (error) {
+    console.error("[db.getUserByOpenId]", error);
+    return undefined;
+  }
 }
 
 export async function getUserByEmail(email: string) {
-  const db = await requireDb();
-  const normalized = normalizeEmail(email);
-  return (await db.select().from(users).where(eq(users.email, normalized)).limit(1))[0];
+  try {
+    const db = await requireDb();
+    const normalized = normalizeEmail(email);
+    return (await db.select().from(users).where(eq(users.email, normalized)).limit(1))[0];
+  } catch (error) {
+    if (error instanceof Error && (error.message === "DB_DIRECT_HOST" || error.message === "DB_UNAVAILABLE")) {
+      throw error;
+    }
+    console.error("[db.getUserByEmail]", error);
+    throw new Error("DB_UNAVAILABLE");
+  }
 }
 
 export async function createLocalUser(input: { name: string; email: string; password: string }): Promise<User> {
-  const db = await requireDb();
-  const email = normalizeEmail(input.email);
-  const existing = (await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1))[0];
-  if (existing) throw new Error("EMAIL_TAKEN");
-  const openId = `local_${randomUUID()}`;
-  const passwordHash = await hashPassword(input.password);
-  const role = openId === ENV.ownerOpenId ? "super_admin" : "shop_owner";
-  const inserted = await db.insert(users).values({
-    openId,
-    name: input.name.trim(),
-    email,
-    passwordHash,
-    loginMethod: "password",
-    role,
-    lastSignedIn: new Date(),
-  }).returning();
-  const created = inserted[0];
-  if (!created) throw new Error("USER_CREATE_FAILED");
-  return created;
+  try {
+    const db = await requireDb();
+    const email = normalizeEmail(input.email);
+    const existing = (await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1))[0];
+    if (existing) throw new Error("EMAIL_TAKEN");
+    const openId = `local_${randomUUID()}`;
+    const passwordHash = await hashPassword(input.password);
+    const role = openId === ENV.ownerOpenId ? "super_admin" : "shop_owner";
+    const inserted = await db.insert(users).values({
+      openId,
+      name: input.name.trim(),
+      email,
+      passwordHash,
+      loginMethod: "password",
+      role,
+      lastSignedIn: new Date(),
+    }).returning();
+    const created = inserted[0];
+    if (!created) throw new Error("USER_CREATE_FAILED");
+    return created;
+  } catch (error) {
+    if (error instanceof Error && (error.message === "EMAIL_TAKEN" || error.message === "USER_CREATE_FAILED" || error.message === "DB_DIRECT_HOST" || error.message === "DB_UNAVAILABLE")) {
+      throw error;
+    }
+    console.error("[db.createLocalUser]", error);
+    throw new Error("USER_CREATE_FAILED");
+  }
 }
 
 export async function recordLocalSignIn(userId: number) {

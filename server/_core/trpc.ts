@@ -5,6 +5,12 @@ import type { TrpcContext } from "./context";
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
+  errorFormatter({ shape, error }) {
+    return {
+      ...shape,
+      message: error.message || "تعذر تنفيذ الطلب على الخادم.",
+    };
+  },
 });
 
 export const router = t.router;

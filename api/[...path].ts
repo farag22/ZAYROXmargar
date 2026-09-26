@@ -2,6 +2,13 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Express } from "express";
 import { humanizePlatformError, jsonInternalError, writeJson } from "../server/_core/apiJson";
 
+process.on("unhandledRejection", error => {
+  console.error("[api.unhandledRejection]", error);
+});
+process.on("uncaughtException", error => {
+  console.error("[api.uncaughtException]", error);
+});
+
 export const config = {
   api: {
     bodyParser: false,
@@ -9,27 +16,19 @@ export const config = {
   maxDuration: 30,
 };
 
-let appPromise: Promise<Express> | null = null;
+let app: Express | null = null;
 
-function loadApp() {
-  if (!appPromise) {
-    appPromise = import("../server/app").then(({ createApp }) => createApp());
-  }
-  return appPromise;
+async function getApp(): Promise<Express> {
+  if (app) return app;
+  const { createApp } = await import("../server/app");
+  app = createApp();
+  return app;
 }
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   try {
-    const app = await loadApp();
-    await new Promise<void>((resolve, reject) => {
-      const finish = () => resolve();
-      res.once("finish", finish);
-      res.once("close", finish);
-      app(req as never, res as never, (error?: unknown) => {
-        if (error) reject(error);
-        else resolve();
-      });
-    });
+    const expressApp = await getApp();
+    expressApp(req as never, res as never);
   } catch (error) {
     const message = error instanceof Error ? humanizePlatformError(error.message) : "تعذر تنفيذ الطلب على الخادم.";
     writeJson(res, 500, jsonInternalError(message));

@@ -17,6 +17,17 @@ const productImageInput = {
   productImageContentType: z.literal("image/webp").optional(),
 };
 
+function authDatabaseMessage(error: unknown) {
+  const code = error instanceof Error ? error.message : "";
+  if (code === "DB_DIRECT_HOST") {
+    return "DATABASE_URL يجب أن يستخدم Transaction pooler على المنفذ 6543 وليس db.xxx.supabase.co.";
+  }
+  if (code === "DB_UNAVAILABLE") {
+    return "تعذر الاتصال بقاعدة البيانات. راجع DATABASE_URL على Vercel.";
+  }
+  return "تعذر إكمال المصادقة حالياً. راجع DATABASE_URL وJWT_SECRET على Vercel.";
+}
+
 function todayRange() {
   const from = new Date();
   from.setHours(0, 0, 0, 0);
@@ -80,7 +91,7 @@ export const appRouter = router({
           console.error("[auth.register]", error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: "تعذر إنشاء الحساب حالياً. تحقق من DATABASE_URL وJWT_SECRET على Vercel.",
+            message: authDatabaseMessage(error),
           });
         }
       }),
@@ -111,7 +122,7 @@ export const appRouter = router({
           console.error("[auth.login]", error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: "تعذر تسجيل الدخول حالياً. تحقق من DATABASE_URL وJWT_SECRET على Vercel.",
+            message: authDatabaseMessage(error),
           });
         }
       }),
