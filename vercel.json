@@ -1,9 +1,10 @@
 {
   "version": 2,
   "buildCommand": "pnpm build",
-  "installCommand": "pnpm install",
-  "outputDirectory": "dist",
+  "installCommand": "pnpm install --frozen-lockfile",
+  "outputDirectory": "dist/public",
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/api/(.*)", "destination": "/api/[...path]" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
