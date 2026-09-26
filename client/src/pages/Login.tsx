@@ -1,10 +1,10 @@
-import { useEffect } from "react";
-import { useLocation } from "wouter";
+import DashboardLayout from "@/components/DashboardLayout";
+import Workspace from "@/pages/Workspace";
 
 export default function Login() {
-  const [, setLocation] = useLocation();
-  useEffect(() => {
-    setLocation("/dashboard");
-  }, [setLocation]);
-  return null;
+  return (
+    <DashboardLayout>
+      <Workspace view="dashboard" />
+    </DashboardLayout>
+  );
 }
