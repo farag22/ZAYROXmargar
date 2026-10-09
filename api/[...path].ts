@@ -25,10 +25,33 @@ async function getApp(): Promise<Express> {
   return app;
 }
 
+function runExpressApp(expressApp: Express, req: IncomingMessage, res: ServerResponse) {
+  return new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    res.once("finish", finish);
+    res.once("close", finish);
+    expressApp(req as never, res as never, (error?: unknown) => {
+      if (error) {
+        if (!settled) {
+          settled = true;
+          reject(error);
+        }
+        return;
+      }
+      finish();
+    });
+  });
+}
+
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   try {
     const expressApp = await getApp();
-    expressApp(req as never, res as never);
+    await runExpressApp(expressApp, req, res);
   } catch (error) {
     const message = error instanceof Error ? humanizePlatformError(error.message) : "تعذر تنفيذ الطلب على الخادم.";
     writeJson(res, 500, jsonInternalError(message));
