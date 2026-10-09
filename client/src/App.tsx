@@ -1,6 +1,8 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
+import Login from "@/pages/Login";
+import Register from "@/pages/Register";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -13,6 +15,9 @@ import TrackOrder from "./pages/TrackOrder";
 function Router() {
   return (
     <Switch>
+      {/* صفحات المصادقة يجب أن تسبق لوحة التحكم حتى لا ينتهي التحويل إلى 404. */}
+      <Route path="/login" component={Login} />
+      <Route path="/register" component={Register} />
       {/* الصفحة الرئيسية تفتح لوحة التحكم مباشرة */}
       <Route path={"/"}>{() => <DashboardLayout><Workspace view="dashboard" /></DashboardLayout>}</Route>
       <Route path={"/dashboard"}>{() => <DashboardLayout><Workspace view="dashboard" /></DashboardLayout>}</Route>
